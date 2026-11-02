@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [development, production]
     tags: ["v*"]
 
 permissions:
@@ -11,7 +11,7 @@ permissions:
 
 concurrency:
   group: ci-${{ github.ref }}
-  # Superseded PR runs are cancelled; runs on main and tags always finish.
+  # Superseded PR runs are cancelled; runs on branches and tags always finish.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
@@ -104,23 +104,25 @@ jobs:
         with:
           images: ghcr.io/rmx-lt/rmx-backend-probe
           tags: |
-            type=sha,prefix=sha-,format=short,enable=${{ github.ref == 'refs/heads/main' }}
-            type=raw,value=main,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=sha-,format=short,enable=${{ github.ref == 'refs/heads/production' }}
+            type=raw,value=production,enable=${{ github.ref == 'refs/heads/production' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=pr
-      # On pull requests the image is only built (to test the Dockerfile), not pushed.
+      # Pushed only from production and v* tags; pull requests and development
+      # only build it (to test the Dockerfile).
       - uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event_name == 'push' && (github.ref == 'refs/heads/production' || startsWith(github.ref, 'refs/tags/')) }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Deploy every push to main. The SSH key's authorized_keys entry on the VPS
+  # Deploy every push to production (a merged development -> production PR).
+  # The SSH key's authorized_keys entry on the VPS
   # forces one script (/usr/local/sbin/rmx-deploy-probe, source in rmx-vps:
   # services/probe/deploy/), so the only thing this job can send is the tag.
   # The script pulls the image, restarts probe-app, waits for /probe/health
@@ -129,7 +131,7 @@ jobs:
   # (the VPS host key line, pinned, so no trust-on-first-use).
   deploy:
     name: Deploy to VPS
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/production'
     needs: [image]
     runs-on: ubuntu-24.04
     environment: production
