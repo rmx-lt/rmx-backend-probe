@@ -1,5 +1,7 @@
-# Rust
-/target
+# Go build output
+/bin
+/probe-server
+*.test
 
 # Local settings with passwords (copy .env.example)
 .env
