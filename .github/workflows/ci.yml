@@ -21,7 +21,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       # Installs the Go version from go.mod and caches modules and the build.
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       - name: gofmt
@@ -75,7 +75,7 @@ jobs:
         run: |
           cp .env.example .env
           docker compose -f compose.dev.yaml up -d --wait
-      - uses: actions/setup-go@v6
+      - uses: actions/setup-go@v7
         with:
           go-version-file: go.mod
       # The settings come from the .env copied above (the tests load it).
