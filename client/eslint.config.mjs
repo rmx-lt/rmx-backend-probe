@@ -7,7 +7,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default defineConfig(
-  // ts-rs output is generated from the Rust types; don't lint it.
+  // Generated from the Go types (go run ./cmd/gen-ts); don't lint it.
   { ignores: ["dist", "node_modules", "src/generated"] },
   eslint.configs.recommended,
   tseslint.configs.recommended,

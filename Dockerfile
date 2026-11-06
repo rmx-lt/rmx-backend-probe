@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 #
-# probe-server image: the Rust binary plus the built client, nothing else.
+# probe-server image: the Go binary plus the built client, nothing else.
 #   docker build -t rmx-backend-probe .
 # Bun is only a build tool here; the runtime image has no Bun, shell or package manager.
 
@@ -12,36 +12,35 @@ RUN bun install --frozen-lockfile
 COPY client/ ./
 RUN bun run build
 
-# ---- 2. Server: cargo-chef caches the dependency build in its own layer -----
-# The Rust version must match rust-toolchain.toml.
-FROM lukemathwalker/cargo-chef:0.1.78-rust-1.99.1-slim-trixie AS chef
+# ---- 2. Server: a static Go binary ------------------------------------------
+# The Go version must match the go directive in go.mod.
+FROM golang:1.26.0-trixie AS server
 WORKDIR /src
-# Use the image's compiler instead of letting rustup download the pinned one again.
-ENV RUSTUP_TOOLCHAIN=1.99.1
-
-FROM chef AS planner
+# Dependencies first, so this layer is cached until go.mod or go.sum change.
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
 COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
+# No cgo: the binary runs on the static distroless image. -trimpath and
+# -s -w keep it small.
+ARG VERSION=0.1.0
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X github.com/rmx-lt/rmx-backend-probe/internal/server.Version=${VERSION}" \
+    -o /out/probe-server ./cmd/probe-server
 
-FROM chef AS server
-COPY --from=planner /src/recipe.json recipe.json
-RUN cargo chef cook --release --locked -p probe-server --recipe-path recipe.json
-COPY . .
-# Compile-time checked queries use the committed .sqlx data: no database needed.
-ENV SQLX_OFFLINE=true
-RUN cargo build --release --locked -p probe-server
-
-# ---- 3. Runtime: distroless (glibc + CA certs), runs as uid 65532 ----------
-FROM gcr.io/distroless/cc-debian13:nonroot
+# ---- 3. Runtime: distroless (CA certs, no libc), runs as uid 65532 ---------
+FROM gcr.io/distroless/static-debian13:nonroot
 LABEL org.opencontainers.image.source="https://github.com/rmx-lt/rmx-backend-probe" \
       org.opencontainers.image.description="Blade of Grass backend probe (CRUD over HTTPS, WSS and MQTT)" \
       org.opencontainers.image.licenses="Apache-2.0"
 WORKDIR /app
-COPY --from=server /src/target/release/probe-server /app/probe-server
+COPY --from=server /out/probe-server /app/probe-server
 COPY --from=client /client/dist /app/static
+# probe-app runs with a 64 MB memory limit and a password check needs 19 MiB:
+# a soft limit makes the Go garbage collector give memory back before the
+# container is killed.
 ENV BIND_ADDR=0.0.0.0:8080 \
     STATIC_DIR=/app/static \
-    RUST_LOG=info
+    GOMEMLIMIT=40MiB
 USER nonroot
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
