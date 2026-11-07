@@ -58,4 +58,4 @@ earlier Rust version migrated (with sqlx) is adopted on the first start.
 
 ## License
 
-[Apache-2.0](LICENSE).
+Code and documentation are licensed under [Apache-2.0](LICENSE).
