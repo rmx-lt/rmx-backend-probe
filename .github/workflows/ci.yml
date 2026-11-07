@@ -125,7 +125,7 @@ jobs:
 
   # Deploy every push to production (a merged development -> production PR).
   # The SSH key's authorized_keys entry on the VPS
-  # forces one script (/usr/local/sbin/rmx-deploy-probe, source in rmx-vps:
+  # forces one script (/usr/local/sbin/rmx-deploy-probe, source in rmx-server-infra:
   # services/probe/deploy/), so the only thing this job can send is the tag.
   # The script pulls the image, restarts probe-app, waits for /probe/health
   # and rolls back if it isn't healthy (then this job fails).
